@@ -1,0 +1,28 @@
+# OpenCode Configuration for K8s RAG Operations
+# Connects OpenCode CLI to oMLX (LLM) + MCP Servers (RAG + K8s)
+
+providers:
+  omlx:
+    kind: openai
+    apiKey: "not-needed"
+    baseURL: "http://127.0.0.1:8000"
+
+models:
+  default:
+    provider: omlx
+    model: "default"
+
+mcpServers:
+  # RAG MCP Server - Knowledge retrieval + feedback loop
+  # Requires: cd backend && mvn spring-boot:run
+  rag:
+    type: stdio
+    command: java
+    args: ["-jar", "backend/target/rag-backend.jar", "--spring.profiles.active=mcp"]
+
+  # K8s MCP Server - kubectl operations
+  # Requires: pip install -r k8s-mcp-server/requirements.txt
+  k8s:
+    type: stdio
+    command: python3
+    args: ["k8s-mcp-server/server.py"]

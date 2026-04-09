@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: k8s-rag-backend
+
+  # PostgreSQL + PGVector
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ragdb
+    username: raguser
+    password: ragpass
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Spring AI - PGVector Store
+  ai:
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 384
+
+    # OpenAI-compatible client -> oMLX
+    openai:
+      base-url: http://127.0.0.1:8000
+      api-key: not-needed
+      chat:
+        options:
+          model: default
+          max-tokens: 2048
+        connect-timeout: 10s
+        read-timeout: 120s
+      embedding:
+        enabled: false
+
+    # Local ONNX embedding model
+    transformers:
+      embedding:
+        enabled: true
+
+    embedding:
+      transformer:
+        onnx:
+          modelUri: file:${user.dir}/models/all-MiniLM-L6-v2/model.onnx
+        tokenizer:
+          uri: file:${user.dir}/models/all-MiniLM-L6-v2/tokenizer.json
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+server:
+  port: 8081
+
+logging:
+  level:
+    org.springframework.ai: INFO
+    com.example.rag: DEBUG
+
+# Application-specific config
+app:
+  system-prompt: |
+    You are a Kubernetes operations expert and SRE assistant.
+    When diagnosing issues, follow this approach:
+    1. Analyze the symptoms described
+    2. Suggest specific kubectl commands to gather more information
+    3. Based on the output, provide a diagnosis
+    4. Recommend specific actions to resolve the issue
+    Always provide exact kubectl commands that can be copy-pasted.
+    Reference any similar past incidents from the context provided.

@@ -1,0 +1,5 @@
+mlx-lm>=0.20.0
+datasets>=2.18.0
+psycopg2-binary>=2.9.9
+pyyaml>=6.0
+tqdm>=4.66.0

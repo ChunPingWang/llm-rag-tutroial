@@ -1,0 +1,27 @@
+# Java
+backend/target/
+*.class
+*.jar
+!backend/target/rag-backend.jar
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+fine-tune/data/
+fine-tune/adapters/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Models (large files)
+backend/models/
+
+# Data
+data/
+
+# Env
+.env

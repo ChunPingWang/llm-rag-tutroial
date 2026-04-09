@@ -1,0 +1,17 @@
+# LoRA Fine-Tune Configuration for K8s Operations Model
+model: "mlx-community/Qwen2.5-Coder-32B-Instruct-4bit"
+data_dir: "./data/dataset"
+adapter_path: "./adapters/k8s-ops-lora"
+
+# LoRA hyperparameters
+lora_rank: 16
+lora_layers: 16
+learning_rate: 1.0e-5
+batch_size: 4
+num_epochs: 3
+max_iters: 1000
+
+# Training settings
+warmup_steps: 100
+weight_decay: 0.01
+grad_checkpoint: true

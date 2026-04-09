@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8s RAG Operations</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #1a1a2e; color: #e0e0e0; }
+        .card { background-color: #16213e; border-color: #0f3460; }
+        .card-header { background-color: #0f3460; color: #e0e0e0; }
+        .chat-container { max-height: 500px; overflow-y: auto; }
+        .message { margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; }
+        .message-user { background-color: #1a3a5c; color: #e0e0e0; }
+        .message-ai { background-color: #1e3a2f; color: #e0e0e0; }
+        .message-ai-simple { background-color: #2a2a3e; color: #e0e0e0; }
+        .spinner-border { width: 1rem; height: 1rem; }
+        pre { white-space: pre-wrap; word-wrap: break-word; color: #a8d8ea; }
+        #dropZone {
+            border: 2px dashed #0f3460; border-radius: 0.5rem; padding: 1.5rem;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+        }
+        #dropZone:hover, #dropZone.drag-over { border-color: #e94560; background-color: #1a2a4e; }
+        .badge { font-size: 0.75rem; }
+        .btn-primary { background-color: #e94560; border-color: #e94560; }
+        .btn-primary:hover { background-color: #c73e55; }
+        .btn-success { background-color: #0f3460; border-color: #0f3460; }
+        .form-control { background-color: #1a1a2e; color: #e0e0e0; border-color: #0f3460; }
+        .form-control:focus { background-color: #1a1a2e; color: #e0e0e0; }
+        .session-badge { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4">
+    <h1 class="mb-4">K8s RAG Operations Assistant</h1>
+
+    <div class="row">
+        <!-- Left Column: Upload & Documents & Sessions -->
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header"><strong>Upload Document</strong></div>
+                <div class="card-body">
+                    <input type="file" id="fileInput" style="display:none">
+                    <div id="dropZone" onclick="document.getElementById('fileInput').click()">
+                        <div>Click or drag file to upload</div>
+                        <small class="text-muted">PDF, TXT, MD, YAML</small>
+                        <div class="mt-2" id="fileName" style="color: #4ecca3;"></div>
+                    </div>
+                    <button class="btn btn-primary w-100 mt-2" id="uploadBtn" onclick="uploadFile()">
+                        Upload &amp; Ingest
+                    </button>
+                    <div id="uploadStatus" class="mt-2"></div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Ingested Documents</strong>
+                    <button class="btn btn-sm btn-outline-light float-end" onclick="loadDocuments()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div id="documentList"><em class="text-muted">No documents ingested yet.</em></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><strong>Active Session</strong></div>
+                <div class="card-body">
+                    <div id="sessionInfo">
+                        <em class="text-muted">No active session. Start one from the chat.</em>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Chat -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <strong>K8s Diagnostic Chat</strong>
+                    <span class="float-end">
+                        <span class="badge bg-success session-badge" id="sessionBadge" style="display:none;">Session Active</span>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="chat-container" id="chatContainer"></div>
+                    <hr style="border-color: #0f3460;">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="questionInput"
+                               placeholder="Describe your K8s issue or ask a question..."
+                               onkeydown="if(event.key==='Enter') askQuestion()">
+                        <button class="btn btn-success" onclick="askQuestion()">Ask (RAG)</button>
+                        <button class="btn btn-outline-secondary" onclick="askSimple()">Ask (No RAG)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let activeSessionId = null;
+
+    function uploadFile() {
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadStatus = document.getElementById('uploadStatus');
+        if (!fileInput.files.length) {
+            uploadStatus.innerHTML = '<div class="alert alert-warning py-1">Please select a file.</div>';
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<span class="spinner-border"></span> Ingesting...';
+        fetch('/api/documents/upload', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                uploadStatus.innerHTML = `<div class="alert alert-success py-1">${data.message}</div>`;
+                fileInput.value = '';
+                document.getElementById('fileName').textContent = '';
+                loadDocuments();
+            })
+            .catch(err => uploadStatus.innerHTML = `<div class="alert alert-danger py-1">Error: ${err.message}</div>`)
+            .finally(() => { uploadBtn.disabled = false; uploadBtn.innerHTML = 'Upload & Ingest'; });
+    }
+
+    function loadDocuments() {
+        fetch('/api/documents').then(r => r.json()).then(docs => {
+            const list = document.getElementById('documentList');
+            if (!docs.length) { list.innerHTML = '<em class="text-muted">No documents ingested yet.</em>'; return; }
+            list.innerHTML = docs.map(d =>
+                `<div class="d-flex justify-content-between mb-2">
+                    <span><strong>${d.filename}</strong> <span class="badge bg-secondary">${d.type}</span></span>
+                    <span class="badge bg-info">${d.chunkCount} chunks</span>
+                </div>`).join('');
+        });
+    }
+
+    function askQuestion() {
+        const input = document.getElementById('questionInput');
+        const q = input.value.trim();
+        if (!q) return;
+        addMessage(q, 'user'); input.value = ''; showLoading();
+        fetch('/api/ask', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({question: q}) })
+            .then(r => r.json())
+            .then(data => { removeLoading(); let msg = data.answer || 'No answer';
+                if (data.sources?.length) msg += '\n\n[Sources: ' + data.sources.join(', ') + ']';
+                addMessage(msg, 'ai'); })
+            .catch(err => { removeLoading(); addMessage('Error: ' + err.message, 'ai'); });
+    }
+
+    function askSimple() {
+        const input = document.getElementById('questionInput');
+        const q = input.value.trim();
+        if (!q) return;
+        addMessage(q + ' [No RAG]', 'user'); input.value = ''; showLoading();
+        fetch('/api/ask/simple', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({question: q}) })
+            .then(r => r.json())
+            .then(data => { removeLoading(); addMessage(data.answer || 'No answer', 'ai-simple'); })
+            .catch(err => { removeLoading(); addMessage('Error: ' + err.message, 'ai-simple'); });
+    }
+
+    function addMessage(text, type) {
+        const c = document.getElementById('chatContainer');
+        const div = document.createElement('div');
+        div.className = `message message-${type}`;
+        const label = type === 'user' ? 'You' : (type === 'ai' ? 'AI (RAG)' : 'AI (No RAG)');
+        div.innerHTML = `<strong>${label}:</strong><pre class="mb-0 mt-1">${escapeHtml(text)}</pre>`;
+        c.appendChild(div); c.scrollTop = c.scrollHeight;
+    }
+    function showLoading() {
+        const c = document.getElementById('chatContainer');
+        const div = document.createElement('div'); div.id = 'loading'; div.className = 'message message-ai';
+        div.innerHTML = '<span class="spinner-border"></span> Thinking...';
+        c.appendChild(div); c.scrollTop = c.scrollHeight;
+    }
+    function removeLoading() { const el = document.getElementById('loading'); if (el) el.remove(); }
+    function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+    document.getElementById('fileInput').addEventListener('change', function() {
+        document.getElementById('fileName').textContent = this.files.length ? this.files[0].name : '';
+    });
+    const dz = document.getElementById('dropZone');
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', e => {
+        e.preventDefault(); dz.classList.remove('drag-over');
+        if (e.dataTransfer.files.length) {
+            document.getElementById('fileInput').files = e.dataTransfer.files;
+            document.getElementById('fileName').textContent = e.dataTransfer.files[0].name;
+        }
+    });
+    loadDocuments();
+</script>
+</body>
+</html>
