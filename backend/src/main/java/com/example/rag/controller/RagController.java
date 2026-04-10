@@ -78,6 +78,46 @@ public class RagController {
         }
     }
 
+    /**
+     * Parameterized RAG query for evaluation and parameter tuning.
+     */
+    @PostMapping("/ask/parameterized")
+    public ResponseEntity<AskResponse> askParameterized(
+            @RequestBody Map<String, Object> request) {
+        try {
+            String question = (String) request.get("question");
+            String category = (String) request.get("category");
+            double threshold = request.containsKey("similarityThreshold")
+                    ? ((Number) request.get("similarityThreshold")).doubleValue() : 0.3;
+            int topK = request.containsKey("topK")
+                    ? ((Number) request.get("topK")).intValue() : 5;
+            AskResponse response = ragService.ask(question, category, threshold, topK);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.ok(new AskResponse("Error: " + getRootCauseMessage(e), List.of()));
+        }
+    }
+
+    /**
+     * Debug endpoint for evaluation: returns answer + retrieved documents.
+     */
+    @PostMapping("/eval/ask-debug")
+    public ResponseEntity<Map<String, Object>> askDebug(
+            @RequestBody Map<String, Object> request) {
+        try {
+            String question = (String) request.get("question");
+            String category = (String) request.get("category");
+            double threshold = request.containsKey("similarityThreshold")
+                    ? ((Number) request.get("similarityThreshold")).doubleValue() : 0.3;
+            int topK = request.containsKey("topK")
+                    ? ((Number) request.get("topK")).intValue() : 5;
+            Map<String, Object> result = ragService.askDebug(question, category, threshold, topK);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("error", getRootCauseMessage(e)));
+        }
+    }
+
     @PostMapping("/feedback/process")
     public ResponseEntity<Map<String, Object>> processFeedback() {
         int count = feedbackService.processUnprocessedSessions();

@@ -59,6 +59,106 @@ OpenCode 呼叫 K8s MCP → 執行 kubectl 命令
 
 ---
 
+## 技術棧與原理
+
+### 後端框架層
+
+| 技術 | 版本 | 角色 | 原理 |
+|------|------|------|------|
+| **Spring Boot** | 3.4.1 | 應用程式框架 | 依賴注入、REST API、Actuator 監控。簡化企業級應用開發 |
+| **Spring AI** | 1.0.0 | AI 整合框架 | 抽象化 LLM、Embedding、VectorStore。`ChatClient` 統一介面支援多家 LLM provider；`RetrievalAugmentationAdvisor` 自動將 RAG 上下文注入 prompt |
+| **Spring Data JPA** | - | ORM | 管理 Session/Interaction entities，自動產生 DDL，提供 Repository pattern |
+| **Maven** | 3.9+ | 建置工具 | 依賴管理與打包 |
+
+### 向量資料庫層（RAG 核心）
+
+| 技術 | 版本 | 角色 | 原理 |
+|------|------|------|------|
+| **PostgreSQL** | 16 | 關聯式資料庫 | 儲存 Session 紀錄 + 向量資料（同一個 DB 雙用途） |
+| **pgvector** | latest | PostgreSQL 向量擴充 | 將向量運算下推到 DB 層，支援 SQL + 向量混合查詢（例如：WHERE metadata->>'category'='OOMKill' ORDER BY embedding <=> query） |
+| **HNSW Index** | - | 近似最近鄰搜尋演算法 | Hierarchical Navigable Small World — 多層圖結構，上層稀疏快速導航、下層密集精確搜尋。查詢複雜度 O(log N)，記憶體換取速度 |
+| **Cosine Distance** | - | 向量相似度度量 | `1 - (A·B) / (|A|·|B|)`。只關心向量方向不關心長度，適合文本 embedding（文本長度不應影響語義相似度） |
+
+**為什麼選 PGVector 而不是 Pinecone/Weaviate/Milvus？**
+- 已有 PostgreSQL 用於 session 紀錄，避免新增基礎設施
+- ACID 交易保證向量資料和 metadata 一致
+- SQL 過濾能力強（`WHERE metadata->>'incident.category' = 'OOMKill'`）
+- 本地部署，無資料外流風險，適合機房環境
+- HNSW 性能接近專用向量 DB（<100ms 延遲 for <1M vectors）
+
+### Embedding 模型層
+
+| 技術 | 細節 | 原理 |
+|------|------|------|
+| **all-MiniLM-L6-v2** | Sentence-Transformers 模型 | 由 BERT 蒸餾而來的輕量語義模型。6 層 Transformer，22M 參數，訓練於 1B+ 句對 |
+| **ONNX Runtime** | 執行引擎 | 將 PyTorch 模型轉為 ONNX 格式，純 Java 執行（無需 Python）。推論速度比原生 PyTorch 快 1.5-2x |
+| **384 維向量** | Embedding 輸出 | 每個文本片段壓縮為 384 個浮點數，保留語義資訊。維度越高越精準但越耗空間 |
+| **Token-based Splitter** | Spring AI 內建 | 以 token 為單位切割文件（非字元），避免切斷語義邊界 |
+
+**Embedding 原理**：文本 → tokenize → Transformer 編碼 → 取 [CLS] token 的隱藏狀態 → L2 normalize → 384 維向量。語義相近的文本在向量空間中距離也相近。
+
+### LLM 推論層
+
+| 技術 | 角色 | 原理 |
+|------|------|------|
+| **oMLX** | 本機 LLM 服務 | Apple MLX 框架的推論 server，原生支援 Apple Silicon 的 Metal GPU 加速。OpenAI-compatible API |
+| **OpenAI Protocol** | 通訊協定 | `/v1/chat/completions` 標準介面，Spring AI 可無縫對接任何相容的 provider（LM Studio、vLLM、Ollama、oMLX） |
+| **System Prompt** | Prompt Engineering | 定義 LLM 的角色（K8s SRE 專家）和行為（先分析、再建議命令、再診斷） |
+| **LoRA (Low-Rank Adaptation)** | Fine-Tune 技術 | 凍結基礎模型權重，只訓練兩個低秩矩陣 A、B，`W' = W + BA`。參數量減少 10000 倍，可在單張消費級 GPU 上訓練 |
+
+**RAG vs Fine-Tune 原理比較**：
+- **RAG**：不改變模型，在推論時將檢索到的文件拼接到 prompt。優點：即時更新、可引用來源、成本低
+- **Fine-Tune**：修改模型權重，讓模型「記住」知識。優點：推論時不需要檢索、回答風格一致
+- **最佳實踐**：RAG 處理事實類知識（80%），Fine-Tune 處理行為模式和推理風格（20%）
+
+### CLI 與協定層
+
+| 技術 | 角色 | 原理 |
+|------|------|------|
+| **OpenCode** | Terminal AI Agent | 原生支援 MCP client 和 OpenAI API。提供 chat UI、檔案操作、工具呼叫 |
+| **MCP (Model Context Protocol)** | Anthropic 標準協定 | 類似「LLM 的 Language Server Protocol」。讓 LLM 透過結構化介面呼叫工具，統一 tool discovery 和 invocation |
+| **stdio Transport** | MCP 傳輸層 | 透過程序的 stdin/stdout 通訊（JSON-RPC）。優點：本地部署無網路開銷、安全 |
+| **kubectl + client-go** | K8s 操作介面 | 透過 kubeconfig 存取 cluster，使用使用者自己的 RBAC 權限（最小權限原則） |
+
+### RAG 完整流程原理
+
+```
+[文件匯入階段]
+文件 (PDF/MD/YAML) 
+  → TextReader 解析 
+  → TokenTextSplitter 切塊（預設 800 tokens/chunk） 
+  → all-MiniLM-L6-v2 編碼為 384 維向量 
+  → 加上 metadata（source, category, kind） 
+  → PGVector INSERT
+
+[查詢階段]
+使用者問題 
+  → 同一個 embedding 模型編碼為 384 維向量 
+  → pgvector HNSW 索引找最近的 K 個向量（cosine distance） 
+  → 過濾 similarity > threshold 且 metadata 符合條件 
+  → 取出對應的文字 chunks 
+  → 組成 context prompt 
+  → 送給 LLM 生成回答
+
+[回饋階段]
+Session 結束並標記 RESOLVED 
+  → FeedbackService 合成 transcript 
+  → LLM 生成結構化 runbook entry 
+  → 重新 embed 並寫入 PGVector 
+  → 偵測 incident.category 作為 metadata 
+  → 下次查詢時可被檢索
+```
+
+### 監控與維運層
+
+| 技術 | 用途 |
+|------|------|
+| **Spring Boot Actuator** | Health check、metrics、環境變數 endpoint |
+| **Docker Compose** | 本地開發環境編排（PostgreSQL + Backend） |
+| **SLF4J + Logback** | 結構化日誌 |
+
+---
+
 ## 專案結構
 
 ```
@@ -420,6 +520,163 @@ MCP（Model Context Protocol）是 Anthropic 提出的標準化協定，讓 LLM 
 - **RAG MCP Server**：Spring AI 的 `@Tool` 註解暴露 Java 方法為 MCP tools
 - **K8s MCP Server**：Python MCP SDK 封裝 kubectl 命令
 - **傳輸**：stdio（本地）或 HTTP（遠端部署）
+
+---
+
+## 評估框架
+
+完整的 RAG + Fine-Tune 評估系統，量化系統效果與正確性。
+
+### 評估架構
+
+```
+eval/
+├── datasets/
+│   ├── k8s_eval_dataset.json          # 40 個 RAG 測試案例（8 類別）
+│   └── k8s_diagnose_dataset.json      # 10 個 diagnose 測試案例
+├── lib/
+│   ├── metrics.py                     # 指標計算（recall, coverage, hallucination）
+│   ├── kubectl_parser.py              # kubectl 命令正則提取與危險命令偵測
+│   ├── llm_judge.py                   # LLM-as-Judge 評分（4 維度 1-5 分）
+│   └── report_generator.py            # 終端表格 + JSON 報告產生器
+├── rag_evaluator.py                   # RAG 品質評估
+├── finetune_evaluator.py              # Fine-Tune 前後對比
+├── rag_parameter_sweep.py             # 參數掃描（threshold × topK）
+├── e2e_evaluator.py                   # 端到端 feedback loop 驗證
+├── run_all.sh                         # 一鍵執行全部評估
+└── reports/                           # 輸出報告目錄
+```
+
+### 評估指標
+
+| 指標 | 目標 | 計算方式 | 適用 |
+|------|------|---------|------|
+| **Retrieval Keyword Recall** | ≥0.7 | 回答中命中 expected_retrieval_keywords 的比例 | RAG |
+| **Answer Keyword Coverage** | ≥0.6 | 回答中命中 expected_answer_keywords 的比例 | RAG + FT |
+| **Command Recall** | ≥0.5 | 提取的 kubectl 命令 vs expected（模糊比對） | RAG + FT |
+| **Hallucination Score** | ≥0.95 | 1 − (危險命令數 / 總命令數) | RAG + FT |
+| **Structure Score** | ≥0.6 | 回答含 Root Cause/Diagnosis/Resolution 等結構 | FT |
+| **LLM-as-Judge (1-5)** | ≥3.5 | oMLX 評分 correctness/completeness/safety/actionability | RAG + FT |
+| **RAG Lift** | >0 | RAG 分數 − No-RAG 分數 | RAG |
+| **Feedback Improvement** | >0 | 回饋後分數 − 回饋前分數 | E2E |
+
+### 評估類型
+
+#### 1. RAG 評估（`rag_evaluator.py`）
+
+對 40 個 ground truth 問題逐一測試：
+- 呼叫 `/api/ask`（RAG）和 `/api/ask/simple`（無 RAG）
+- 計算 5 大指標
+- 比較 RAG vs No-RAG 的差距（RAG Lift）
+- 按類別分組報告（OOMKill、CrashLoopBackOff、Network…）
+
+```bash
+python eval/rag_evaluator.py --base-url http://localhost:8081
+python eval/rag_evaluator.py --llm-judge  # 啟用 LLM-as-Judge
+```
+
+#### 2. Fine-Tune 評估（`finetune_evaluator.py`）
+
+對比基礎模型與 LoRA fine-tuned 模型：
+- 透過 oMLX OpenAI-compatible API 推論（不直接呼叫 mlx_lm，確保與生產路徑一致）
+- 計算相同指標集
+- 產生 base vs fine-tuned 對比表
+
+```bash
+# 只評估基礎模型
+python eval/finetune_evaluator.py --base-url http://127.0.0.1:8000
+
+# 對比 base vs fine-tuned
+python eval/finetune_evaluator.py \
+  --base-url http://127.0.0.1:8000 \
+  --adapter-url http://127.0.0.1:8001
+```
+
+#### 3. 參數掃描（`rag_parameter_sweep.py`）
+
+自動測試 5 × 4 = 20 種 (threshold, topK) 組合：
+- threshold: 0.1, 0.2, 0.3, 0.4, 0.5
+- topK: 3, 5, 8, 10
+- 加上 category filter 開關對比
+- 以加權 composite score 找出最佳配置
+
+```bash
+python eval/rag_parameter_sweep.py --sample-size 10
+```
+
+#### 4. 端到端 Feedback Loop 評估（`e2e_evaluator.py`）
+
+驗證自我增強機制是否真的有效：
+1. **Baseline**：對 3 個「新知識」問題評分（系統應該答不好）
+2. **Inject**：注入合成的 resolved session（例如：Hikari connection pool leak 的診斷經驗）
+3. **Post-feedback**：重新評分（系統應該答得更好）
+4. **Delta**：量化改進幅度
+
+```bash
+python eval/e2e_evaluator.py --base-url http://localhost:8081
+```
+
+### 一鍵執行全部評估
+
+```bash
+# 前置：確保 backend 和 oMLX 都在運行
+cd backend && mvn spring-boot:run &
+# oMLX 應已跑在 127.0.0.1:8000
+
+pip install -r eval/requirements.txt
+bash eval/run_all.sh
+```
+
+輸出範例：
+
+```
+==============================================
+  RAG Evaluation Framework
+==============================================
+  [1/40] oom-001: My pod keeps getting killed with exit code 137...
+  [2/40] clb-001: My pod keeps showing CrashLoopBackOff status...
+  ...
+
++----------------------------+--------+--------+--------+----------+--------+
+|          Metric            |  Mean  |  Min   |  Max   |  Target  | Status |
++----------------------------+--------+--------+--------+----------+--------+
+|  retrieval_keyword_recall  | 0.752  | 0.500  | 1.000  |  >=0.7   |  PASS  |
+|  answer_keyword_coverage   | 0.683  | 0.333  | 1.000  |  >=0.6   |  PASS  |
+|  command_recall            | 0.575  | 0.000  | 1.000  |  >=0.5   |  PASS  |
+|  hallucination_score       | 0.985  | 0.900  | 1.000  |  >=0.95  |  PASS  |
+|  structure_score           | 0.712  | 0.400  | 1.000  |  >=0.6   |  PASS  |
++----------------------------+--------+--------+--------+----------+--------+
+
+--- RAG Lift Analysis ---
+  Average RAG Lift: +0.187
+  RAG Better: 32/40 (80%)
+  Verdict: RAG IS HELPING
+```
+
+### 使用情境
+
+- **系統驗收**：部署前確認 RAG 品質達標
+- **回歸測試**：每次更新 runbook 或模型後執行，確保沒有退化
+- **參數調校**：透過 sweep 找出最佳 threshold/topK
+- **Fine-Tune 決策**：量化 fine-tune 帶來的實際效益
+- **Feedback Loop 驗證**：證明自我增強機制有效
+
+### 擴展評估資料集
+
+在 `eval/datasets/k8s_eval_dataset.json` 加入新案例即可：
+
+```json
+{
+  "id": "new-001",
+  "category": "NewCategory",
+  "question": "你的問題",
+  "expected_retrieval_keywords": ["keyword1", "keyword2"],
+  "expected_answer_keywords": ["concept1", "concept2"],
+  "expected_kubectl_commands": ["kubectl get ..."],
+  "ground_truth_summary": "預期回答摘要",
+  "difficulty": "easy|medium|hard"
+}
+```
 
 ---
 

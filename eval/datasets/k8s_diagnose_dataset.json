@@ -1,0 +1,82 @@
+[
+  {
+    "id": "diag-oom-001",
+    "category": "OOMKill",
+    "symptom": "Pod my-app in namespace production keeps restarting",
+    "kubectlOutput": "NAME     READY   STATUS      RESTARTS   AGE\nmy-app   0/1     OOMKilled   5          10m\n\nLast State:     Terminated\n  Reason:       OOMKilled\n  Exit Code:    137",
+    "expected_diagnosis_keywords": ["OOMKilled", "memory", "increase limits", "exit code 137"],
+    "expected_kubectl_commands": ["kubectl top pod", "kubectl get pod -o yaml"]
+  },
+  {
+    "id": "diag-clb-001",
+    "category": "CrashLoopBackOff",
+    "symptom": "billing-api pod is in CrashLoopBackOff with 12 restarts",
+    "kubectlOutput": "NAME          READY   STATUS             RESTARTS   AGE\nbilling-api   0/1     CrashLoopBackOff   12         30m\n\nEvents:\n  Warning  BackOff  1m  kubelet  Back-off restarting failed container",
+    "expected_diagnosis_keywords": ["CrashLoopBackOff", "logs", "previous", "startup"],
+    "expected_kubectl_commands": ["kubectl logs", "kubectl describe pod"]
+  },
+  {
+    "id": "diag-pend-001",
+    "category": "ResourceQuota",
+    "symptom": "New deployment pods are stuck in Pending",
+    "kubectlOutput": "NAME              READY   STATUS    RESTARTS   AGE\nweb-frontend-xyz  0/1     Pending   0          15m\n\nEvents:\n  Warning  FailedScheduling  default-scheduler  0/3 nodes are available: 3 Insufficient cpu.",
+    "expected_diagnosis_keywords": ["Insufficient cpu", "scheduling", "node pool", "resource requests"],
+    "expected_kubectl_commands": ["kubectl top nodes", "kubectl describe pod"]
+  },
+  {
+    "id": "diag-img-001",
+    "category": "ImagePull",
+    "symptom": "Pod cannot start, showing image pull error",
+    "kubectlOutput": "NAME        READY   STATUS             RESTARTS   AGE\napi-server  0/1     ImagePullBackOff   0          5m\n\nEvents:\n  Warning  Failed   kubelet  Failed to pull image \"myregistry.com/api:v2.1\": rpc error: code = NotFound desc = manifest unknown",
+    "expected_diagnosis_keywords": ["image", "tag", "manifest unknown", "registry"],
+    "expected_kubectl_commands": ["kubectl describe pod"]
+  },
+  {
+    "id": "diag-net-001",
+    "category": "Network",
+    "symptom": "Frontend pod cannot connect to backend service",
+    "kubectlOutput": "$ kubectl get endpoints backend-svc -n production\nNAME          ENDPOINTS   AGE\nbackend-svc   <none>      2h\n\n$ kubectl get pods -n production -l app=backend\nNAME           READY   STATUS    RESTARTS   AGE\nbackend-abc    1/1     Running   0          2h",
+    "expected_diagnosis_keywords": ["endpoints", "selector", "labels", "service"],
+    "expected_kubectl_commands": ["kubectl get endpoints", "kubectl describe service"]
+  },
+  {
+    "id": "diag-node-001",
+    "category": "NodePressure",
+    "symptom": "Worker node just went NotReady",
+    "kubectlOutput": "NAME          STATUS     ROLES    AGE   VERSION\nworker-01     NotReady   <none>   90d   v1.28.5\nworker-02     Ready      <none>   90d   v1.28.5\n\nConditions:\n  Type             Status\n  MemoryPressure   True\n  DiskPressure     False\n  Ready            False",
+    "expected_diagnosis_keywords": ["NotReady", "MemoryPressure", "kubelet", "memory"],
+    "expected_kubectl_commands": ["kubectl describe node", "kubectl top nodes"]
+  },
+  {
+    "id": "diag-oom-002",
+    "category": "OOMKill",
+    "symptom": "Java application container keeps getting OOMKilled despite 4Gi memory limit",
+    "kubectlOutput": "Container: app\n  Limits:  memory: 4Gi\n  Requests: memory: 2Gi\n  Last State: Terminated, Reason: OOMKilled, Exit Code: 137\n\n$ kubectl top pod java-app -n production\nNAME       CPU   MEMORY\njava-app   200m  3.8Gi",
+    "expected_diagnosis_keywords": ["OOMKilled", "Java", "heap", "MaxRAMPercentage", "memory limits"],
+    "expected_kubectl_commands": ["kubectl top pod"]
+  },
+  {
+    "id": "diag-cert-001",
+    "category": "CertExpiry",
+    "symptom": "kubectl suddenly returns x509 certificate has expired error",
+    "kubectlOutput": "Unable to connect to the server: x509: certificate has expired or is not yet valid: current time 2026-04-10T08:00:00Z is after 2026-04-09T23:59:59Z",
+    "expected_diagnosis_keywords": ["certificate", "expired", "renew", "kubeadm"],
+    "expected_kubectl_commands": ["kubeadm certs check-expiration", "kubeadm certs renew"]
+  },
+  {
+    "id": "diag-etcd-001",
+    "category": "etcd",
+    "symptom": "API server requests are taking 10+ seconds to respond",
+    "kubectlOutput": "$ kubectl get componentstatuses\nNAME                 STATUS      MESSAGE\netcd-0               Unhealthy   context deadline exceeded\nscheduler            Healthy     ok\ncontroller-manager   Healthy     ok",
+    "expected_diagnosis_keywords": ["etcd", "unhealthy", "disk", "latency", "compaction"],
+    "expected_kubectl_commands": ["kubectl get componentstatuses", "kubectl logs"]
+  },
+  {
+    "id": "diag-clb-002",
+    "category": "CrashLoopBackOff",
+    "symptom": "Newly deployed version crashes immediately, previous version was working",
+    "kubectlOutput": "NAME              READY   STATUS             RESTARTS   AGE\napp-v2-xyz        0/1     CrashLoopBackOff   8          20m\n\n$ kubectl logs app-v2-xyz --previous\nError: FATAL: password authentication failed for user \"appuser\"\nconnection to server at \"db.internal\" port 5432 failed",
+    "expected_diagnosis_keywords": ["database", "authentication", "password", "connection", "Secret", "ConfigMap"],
+    "expected_kubectl_commands": ["kubectl logs", "kubectl describe pod", "kubectl get secret"]
+  }
+]

@@ -12,11 +12,19 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
 
 @Service
 public class RagService {
 
     private static final Logger log = LoggerFactory.getLogger(RagService.class);
+
+    private static final double DEFAULT_SIMILARITY_THRESHOLD = 0.3;
+    private static final int DEFAULT_TOP_K = 5;
 
     private final ChatClient chatClient;
     private final VectorStore vectorStore;
@@ -31,12 +39,18 @@ public class RagService {
     }
 
     public AskResponse ask(String question, String categoryFilter) {
-        log.info("RAG query: {} (filter: {})", question, categoryFilter);
+        return ask(question, categoryFilter, DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_TOP_K);
+    }
+
+    public AskResponse ask(String question, String categoryFilter,
+                           double similarityThreshold, int topK) {
+        log.info("RAG query: {} (filter: {}, threshold: {}, topK: {})",
+                question, categoryFilter, similarityThreshold, topK);
 
         var retrieverBuilder = VectorStoreDocumentRetriever.builder()
                 .vectorStore(vectorStore)
-                .similarityThreshold(0.3)
-                .topK(5);
+                .similarityThreshold(similarityThreshold)
+                .topK(topK);
 
         if (categoryFilter != null && !categoryFilter.isBlank()) {
             var filterBuilder = new FilterExpressionBuilder();
@@ -104,5 +118,44 @@ public class RagService {
                 .user(prompt)
                 .call()
                 .content();
+    }
+
+    /**
+     * Debug method: returns both the answer AND the retrieved documents.
+     * Used by the evaluation framework to measure retrieval quality.
+     */
+    public Map<String, Object> askDebug(String question, String categoryFilter,
+                                         double similarityThreshold, int topK) {
+        log.info("Debug RAG query: {}", question);
+
+        // First, retrieve documents directly
+        var searchBuilder = SearchRequest.builder()
+                .query(question)
+                .similarityThreshold(similarityThreshold)
+                .topK(topK);
+
+        List<Document> retrievedDocs = vectorStore.similaritySearch(searchBuilder.build());
+
+        // Build document summaries for the debug response
+        List<Map<String, Object>> docSummaries = retrievedDocs.stream().map(doc -> {
+            Map<String, Object> summary = new java.util.HashMap<>();
+            summary.put("content", doc.getText().substring(0, Math.min(doc.getText().length(), 500)));
+            summary.put("metadata", doc.getMetadata());
+            return summary;
+        }).collect(Collectors.toList());
+
+        // Then get the full RAG answer
+        AskResponse ragResponse = ask(question, categoryFilter, similarityThreshold, topK);
+
+        return Map.of(
+                "answer", ragResponse.answer(),
+                "sources", ragResponse.sources(),
+                "retrievedDocuments", docSummaries,
+                "parameters", Map.of(
+                        "similarityThreshold", similarityThreshold,
+                        "topK", topK,
+                        "categoryFilter", categoryFilter != null ? categoryFilter : ""
+                )
+        );
     }
 }

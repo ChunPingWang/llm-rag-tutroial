@@ -1,0 +1,402 @@
+[
+  {
+    "id": "clb-001",
+    "category": "CrashLoopBackOff",
+    "question": "My pod keeps showing CrashLoopBackOff status and the restart count keeps increasing, what should I check?",
+    "expected_retrieval_keywords": ["CrashLoopBackOff", "restarts", "container exits"],
+    "expected_answer_keywords": ["kubectl describe pod", "kubectl logs", "previous", "OOMKilled", "liveness probe", "environment variables"],
+    "expected_kubectl_commands": ["kubectl describe pod", "kubectl logs"],
+    "ground_truth_summary": "Check pod events with describe, check container logs with --previous flag, look for OOMKilled, probe failures, or missing config.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "clb-002",
+    "category": "CrashLoopBackOff",
+    "question": "A container crashes immediately after starting. The logs show a database connection refused error. How to fix?",
+    "expected_retrieval_keywords": ["CrashLoopBackOff", "crash on startup", "connection failure"],
+    "expected_answer_keywords": ["kubectl logs", "ConfigMap", "Secret", "environment variables", "database", "connection"],
+    "expected_kubectl_commands": ["kubectl logs", "kubectl describe pod"],
+    "ground_truth_summary": "Check logs for connection errors, verify database service is running, check ConfigMaps and Secrets for correct connection strings.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "clb-003",
+    "category": "CrashLoopBackOff",
+    "question": "Pod is in CrashLoopBackOff because liveness probe keeps failing. How to troubleshoot?",
+    "expected_retrieval_keywords": ["CrashLoopBackOff", "liveness probe", "probe failure"],
+    "expected_answer_keywords": ["liveness probe", "initialDelaySeconds", "periodSeconds", "kubectl describe"],
+    "expected_kubectl_commands": ["kubectl describe pod"],
+    "ground_truth_summary": "Adjust probe timing - increase initialDelaySeconds and periodSeconds. Check if the probe endpoint is correct.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "clb-004",
+    "category": "CrashLoopBackOff",
+    "question": "How do I check the logs of a container that already crashed?",
+    "expected_retrieval_keywords": ["logs", "previous", "container"],
+    "expected_answer_keywords": ["kubectl logs", "--previous", "container"],
+    "expected_kubectl_commands": ["kubectl logs"],
+    "ground_truth_summary": "Use kubectl logs <pod-name> --previous to see logs from the previous container instance.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "clb-005",
+    "category": "CrashLoopBackOff",
+    "question": "A pod works fine locally but CrashLoopBackOff in the cluster. Could it be missing environment variables?",
+    "expected_retrieval_keywords": ["CrashLoopBackOff", "environment variables", "secrets", "ConfigMap"],
+    "expected_answer_keywords": ["ConfigMap", "Secret", "environment", "kubectl describe", "kubectl logs"],
+    "expected_kubectl_commands": ["kubectl describe pod", "kubectl logs"],
+    "ground_truth_summary": "Verify ConfigMaps and Secrets exist and are mounted correctly. Check pod events for mount failures.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "clb-006",
+    "category": "CrashLoopBackOff",
+    "question": "What is the difference between CrashLoopBackOff caused by OOM and application crash?",
+    "expected_retrieval_keywords": ["CrashLoopBackOff", "OOMKilled", "exit code"],
+    "expected_answer_keywords": ["OOMKilled", "exit code 137", "memory limits", "application crash", "logs"],
+    "expected_kubectl_commands": ["kubectl describe pod", "kubectl logs"],
+    "ground_truth_summary": "OOMKilled shows exit code 137 and Reason: OOMKilled in describe output. Application crashes show different exit codes and error in logs.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "oom-001",
+    "category": "OOMKill",
+    "question": "My pod keeps getting killed with exit code 137, what should I do?",
+    "expected_retrieval_keywords": ["OOMKilled", "exit code 137", "memory limits"],
+    "expected_answer_keywords": ["kubectl top pod", "memory limits", "OOMKilled", "increase"],
+    "expected_kubectl_commands": ["kubectl top pod", "kubectl describe pod"],
+    "ground_truth_summary": "Exit code 137 indicates OOMKilled. Check memory usage with kubectl top pod, review limits, increase limits or optimize memory.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "oom-002",
+    "category": "OOMKill",
+    "question": "How to check current memory usage of a pod and its memory limits?",
+    "expected_retrieval_keywords": ["memory usage", "limits", "kubectl top"],
+    "expected_answer_keywords": ["kubectl top pod", "kubectl get pod", "yaml", "limits", "resources"],
+    "expected_kubectl_commands": ["kubectl top pod", "kubectl get pod"],
+    "ground_truth_summary": "Use kubectl top pod for current usage, kubectl get pod -o yaml | grep -A3 limits for configured limits.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "oom-003",
+    "category": "OOMKill",
+    "question": "My Java application running in K8s keeps getting OOMKilled. How to tune JVM memory?",
+    "expected_retrieval_keywords": ["OOMKilled", "Java", "heap", "JVM"],
+    "expected_answer_keywords": ["MaxRAMPercentage", "JVM", "heap", "memory limits"],
+    "expected_kubectl_commands": ["kubectl top pod"],
+    "ground_truth_summary": "Add JVM flag -XX:MaxRAMPercentage=75.0 to limit heap relative to container memory. Increase container memory limits if needed.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "oom-004",
+    "category": "OOMKill",
+    "question": "How to determine if an OOMKill is caused by the application or by a memory leak?",
+    "expected_retrieval_keywords": ["OOMKilled", "memory leak", "memory usage"],
+    "expected_answer_keywords": ["kubectl top pod", "memory", "leak", "logs", "cleanup"],
+    "expected_kubectl_commands": ["kubectl top pod", "kubectl logs"],
+    "ground_truth_summary": "Monitor memory over time with kubectl top pod. Steady increase suggests leak. Check application logs and implement proper resource cleanup.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "oom-005",
+    "category": "OOMKill",
+    "question": "Node is running out of memory and pods are being evicted. What to do?",
+    "expected_retrieval_keywords": ["memory", "node", "eviction", "OOMKilled"],
+    "expected_answer_keywords": ["kubectl top nodes", "memory", "eviction", "scale", "node pool"],
+    "expected_kubectl_commands": ["kubectl top nodes"],
+    "ground_truth_summary": "Check node memory with kubectl top nodes. Scale up node pool or reduce memory-heavy pods.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "pend-001",
+    "category": "ResourceQuota",
+    "question": "My pod is stuck in Pending state, it has been there for 10 minutes. How to debug?",
+    "expected_retrieval_keywords": ["Pending", "pod", "stuck"],
+    "expected_answer_keywords": ["kubectl describe pod", "kubectl top nodes", "resources", "quota", "affinity"],
+    "expected_kubectl_commands": ["kubectl describe pod", "kubectl top nodes"],
+    "ground_truth_summary": "Check pod events for scheduling failures. Common causes: insufficient resources, quota exceeded, PVC not bound, affinity mismatch.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "pend-002",
+    "category": "ResourceQuota",
+    "question": "Pod pending because of Insufficient cpu. How to resolve?",
+    "expected_retrieval_keywords": ["Pending", "Insufficient", "cpu", "resources"],
+    "expected_answer_keywords": ["cpu", "resource", "requests", "node pool", "scale", "reduce"],
+    "expected_kubectl_commands": ["kubectl describe pod", "kubectl top nodes"],
+    "ground_truth_summary": "Either scale up the node pool to add more CPU capacity, or reduce the pod's CPU requests.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "pend-003",
+    "category": "ResourceQuota",
+    "question": "Namespace resource quota exceeded, cannot create new pods. How to check and fix?",
+    "expected_retrieval_keywords": ["ResourceQuota", "namespace", "exceeded"],
+    "expected_answer_keywords": ["kubectl describe resourcequota", "namespace", "quota", "increase", "reduce"],
+    "expected_kubectl_commands": ["kubectl describe resourcequota"],
+    "ground_truth_summary": "Check quota usage with kubectl describe resourcequota. Increase namespace quota or reduce other workloads.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "pend-004",
+    "category": "ResourceQuota",
+    "question": "Pod is Pending because PersistentVolumeClaim is not bound. How to fix?",
+    "expected_retrieval_keywords": ["Pending", "PersistentVolumeClaim", "PVC", "bound"],
+    "expected_answer_keywords": ["PVC", "PersistentVolume", "StorageClass", "provision"],
+    "expected_kubectl_commands": ["kubectl describe pod", "kubectl get pvc"],
+    "ground_truth_summary": "Check StorageClass, ensure dynamic provisioning is available or manually provision a PV matching the PVC spec.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "pend-005",
+    "category": "ResourceQuota",
+    "question": "Pod cannot be scheduled because of node affinity rules. What to check?",
+    "expected_retrieval_keywords": ["Pending", "affinity", "nodeSelector", "scheduling"],
+    "expected_answer_keywords": ["affinity", "nodeSelector", "tolerations", "taints", "kubectl get pod"],
+    "expected_kubectl_commands": ["kubectl get pod", "kubectl describe pod"],
+    "ground_truth_summary": "Check nodeSelector/affinity rules in pod spec. Ensure matching nodes exist or adjust the affinity rules.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "img-001",
+    "category": "ImagePull",
+    "question": "Pod shows ImagePullBackOff. How do I troubleshoot this?",
+    "expected_retrieval_keywords": ["ImagePullBackOff", "ErrImagePull", "image"],
+    "expected_answer_keywords": ["kubectl describe pod", "image", "imagePullSecrets", "registry", "tag"],
+    "expected_kubectl_commands": ["kubectl describe pod"],
+    "ground_truth_summary": "Check pod events for pull errors. Verify image tag exists, imagePullSecrets are correct, and registry is accessible.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "img-002",
+    "category": "ImagePull",
+    "question": "Getting ErrImagePull for a private registry image. How to configure authentication?",
+    "expected_retrieval_keywords": ["ImagePullBackOff", "private registry", "authentication", "imagePullSecrets"],
+    "expected_answer_keywords": ["imagePullSecrets", "credentials", "Secret", "registry"],
+    "expected_kubectl_commands": ["kubectl describe pod"],
+    "ground_truth_summary": "Create or update imagePullSecret with correct registry credentials. Reference it in the pod spec or service account.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "img-003",
+    "category": "ImagePull",
+    "question": "Docker Hub rate limiting is causing image pull failures in our cluster. What are the options?",
+    "expected_retrieval_keywords": ["ImagePullBackOff", "rate limit", "Docker Hub"],
+    "expected_answer_keywords": ["rate limit", "authenticated", "mirror", "registry"],
+    "expected_kubectl_commands": [],
+    "ground_truth_summary": "Use authenticated Docker Hub pulls to get higher rate limits, or set up a mirror/proxy registry.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "img-004",
+    "category": "ImagePull",
+    "question": "Image pull fails with 'manifest unknown' error. What does this mean?",
+    "expected_retrieval_keywords": ["ImagePullBackOff", "tag", "manifest"],
+    "expected_answer_keywords": ["tag", "image", "deployment", "fix"],
+    "expected_kubectl_commands": ["kubectl describe pod"],
+    "ground_truth_summary": "The image tag does not exist in the registry. Fix the image tag in the deployment spec.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "net-001",
+    "category": "Network",
+    "question": "Pods cannot communicate with each other across namespaces. What should I check?",
+    "expected_retrieval_keywords": ["network", "pods", "communicate", "namespace"],
+    "expected_answer_keywords": ["NetworkPolicy", "DNS", "service", "kubectl get networkpolicy"],
+    "expected_kubectl_commands": ["kubectl get networkpolicy"],
+    "ground_truth_summary": "Check NetworkPolicies blocking cross-namespace traffic. Verify DNS resolution and service endpoints.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "net-002",
+    "category": "Network",
+    "question": "DNS resolution is failing inside pods. nslookup returns SERVFAIL.",
+    "expected_retrieval_keywords": ["DNS", "resolution", "CoreDNS", "nslookup"],
+    "expected_answer_keywords": ["CoreDNS", "nslookup", "kube-system", "rollout restart"],
+    "expected_kubectl_commands": ["kubectl get pods -n kube-system"],
+    "ground_truth_summary": "Check if CoreDNS pods are running. Restart CoreDNS with kubectl rollout restart deployment coredns -n kube-system.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "net-003",
+    "category": "Network",
+    "question": "Service returns no endpoints even though pods are running. Why?",
+    "expected_retrieval_keywords": ["service", "endpoints", "selector", "pods"],
+    "expected_answer_keywords": ["endpoints", "selector", "labels", "kubectl get endpoints"],
+    "expected_kubectl_commands": ["kubectl get endpoints"],
+    "ground_truth_summary": "Service selector does not match pod labels. Verify labels on pods match the service selector.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "net-004",
+    "category": "Network",
+    "question": "What are the common causes of networking issues in Kubernetes?",
+    "expected_retrieval_keywords": ["network", "NetworkPolicy", "CNI", "DNS", "kube-proxy"],
+    "expected_answer_keywords": ["NetworkPolicy", "CoreDNS", "CNI", "kube-proxy", "service selector"],
+    "expected_kubectl_commands": [],
+    "ground_truth_summary": "NetworkPolicy blocking, CoreDNS issues, CNI misconfiguration, service selector mismatch, kube-proxy issues.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "net-005",
+    "category": "Network",
+    "question": "How to check if a NetworkPolicy is blocking traffic between two pods?",
+    "expected_retrieval_keywords": ["NetworkPolicy", "blocking", "traffic"],
+    "expected_answer_keywords": ["kubectl get networkpolicy", "kubectl describe networkpolicy", "ingress", "egress"],
+    "expected_kubectl_commands": ["kubectl get networkpolicy", "kubectl describe networkpolicy"],
+    "ground_truth_summary": "List and describe NetworkPolicies in the namespace. Review ingress/egress rules to identify blocks.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "net-006",
+    "category": "Network",
+    "question": "CNI plugin pods are crashing in kube-system. How to debug?",
+    "expected_retrieval_keywords": ["CNI", "kube-system", "network", "plugin"],
+    "expected_answer_keywords": ["CNI", "kube-system", "logs", "calico", "flannel", "cilium"],
+    "expected_kubectl_commands": ["kubectl get pods -n kube-system", "kubectl logs"],
+    "ground_truth_summary": "Check CNI pod status and logs in kube-system namespace. Restart CNI pods if needed.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "node-001",
+    "category": "NodePressure",
+    "question": "One of the nodes shows NotReady status. How to diagnose?",
+    "expected_retrieval_keywords": ["NotReady", "node", "kubelet"],
+    "expected_answer_keywords": ["kubectl describe node", "conditions", "kubelet", "restart"],
+    "expected_kubectl_commands": ["kubectl describe node", "kubectl get nodes"],
+    "ground_truth_summary": "Check node conditions with kubectl describe node. Common causes: kubelet crash, network loss, disk/memory pressure.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "node-002",
+    "category": "NodePressure",
+    "question": "Node is under disk pressure and pods are being evicted. How to fix?",
+    "expected_retrieval_keywords": ["disk pressure", "evicted", "node"],
+    "expected_answer_keywords": ["disk pressure", "evicted", "images", "prune", "docker system prune"],
+    "expected_kubectl_commands": ["kubectl describe node"],
+    "ground_truth_summary": "Clean up unused container images with docker system prune or crictl rmi --prune. Free disk space.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "node-003",
+    "category": "NodePressure",
+    "question": "Kubelet is not running on a node. How to troubleshoot?",
+    "expected_retrieval_keywords": ["kubelet", "NotReady", "node"],
+    "expected_answer_keywords": ["kubelet", "systemctl", "restart", "journalctl", "SSH"],
+    "expected_kubectl_commands": ["kubectl describe node"],
+    "ground_truth_summary": "SSH to the node, check kubelet status with systemctl status kubelet, restart with systemctl restart kubelet.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "node-004",
+    "category": "NodePressure",
+    "question": "What are the node conditions that can cause NotReady status?",
+    "expected_retrieval_keywords": ["NotReady", "conditions", "node"],
+    "expected_answer_keywords": ["DiskPressure", "MemoryPressure", "PIDPressure", "NetworkUnavailable", "kubelet"],
+    "expected_kubectl_commands": ["kubectl describe node"],
+    "ground_truth_summary": "Node conditions: DiskPressure, MemoryPressure, PIDPressure, NetworkUnavailable, and kubelet health.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "node-005",
+    "category": "NodePressure",
+    "question": "Multiple pods are stuck in Terminating state on a NotReady node. What to do?",
+    "expected_retrieval_keywords": ["Terminating", "NotReady", "eviction"],
+    "expected_answer_keywords": ["NotReady", "Terminating", "evicted", "node"],
+    "expected_kubectl_commands": ["kubectl describe node", "kubectl get pods"],
+    "ground_truth_summary": "Pods on NotReady nodes may be stuck. Fix the node first, or force-delete pods if the node is permanently down.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "cert-001",
+    "category": "CertExpiry",
+    "question": "kubectl commands are failing with TLS certificate errors. How to diagnose?",
+    "expected_retrieval_keywords": ["certificate", "TLS", "expiry"],
+    "expected_answer_keywords": ["certificate", "kubeadm certs", "expiration", "renew"],
+    "expected_kubectl_commands": ["kubeadm certs check-expiration"],
+    "ground_truth_summary": "Check certificate expiry with kubeadm certs check-expiration. Renew with kubeadm certs renew all.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "cert-002",
+    "category": "CertExpiry",
+    "question": "How to check when Kubernetes API server certificate expires?",
+    "expected_retrieval_keywords": ["certificate", "API server", "expiry"],
+    "expected_answer_keywords": ["openssl", "kubeadm certs", "check-expiration", "API server"],
+    "expected_kubectl_commands": ["kubeadm certs check-expiration"],
+    "ground_truth_summary": "Use kubeadm certs check-expiration or openssl to check API server cert dates.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "cert-003",
+    "category": "CertExpiry",
+    "question": "Webhook admission calls are failing after certificate rotation. How to fix?",
+    "expected_retrieval_keywords": ["webhook", "certificate", "failing"],
+    "expected_answer_keywords": ["webhook", "certificate", "CA bundle", "restart"],
+    "expected_kubectl_commands": [],
+    "ground_truth_summary": "Update the webhook configuration's CA bundle after certificate rotation. Restart webhook controllers.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "etcd-001",
+    "category": "etcd",
+    "question": "API server is very slow to respond. Could it be an etcd issue?",
+    "expected_retrieval_keywords": ["etcd", "API server", "slow"],
+    "expected_answer_keywords": ["etcd", "componentstatuses", "disk", "latency", "logs"],
+    "expected_kubectl_commands": ["kubectl get componentstatuses"],
+    "ground_truth_summary": "Check etcd health with kubectl get componentstatuses. Check etcd pod logs and disk latency.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "etcd-002",
+    "category": "etcd",
+    "question": "etcd cluster member is down. How to check and recover?",
+    "expected_retrieval_keywords": ["etcd", "member", "failure", "recovery"],
+    "expected_answer_keywords": ["etcd", "kube-system", "logs", "member", "recovery"],
+    "expected_kubectl_commands": ["kubectl get pods -n kube-system", "kubectl logs"],
+    "ground_truth_summary": "Check etcd pods in kube-system, review logs. Replace failed member following etcd recovery procedures.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "etcd-003",
+    "category": "etcd",
+    "question": "etcd database is too large and needs compaction. How to proceed?",
+    "expected_retrieval_keywords": ["etcd", "compaction", "database", "defragment"],
+    "expected_answer_keywords": ["etcd", "compact", "defragment", "database"],
+    "expected_kubectl_commands": [],
+    "ground_truth_summary": "Compact and defragment the etcd database. Monitor etcd disk usage.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "cross-001",
+    "category": "Cross",
+    "question": "My application is intermittently timing out. Where do I start debugging?",
+    "expected_retrieval_keywords": ["timeout", "network", "resources"],
+    "expected_answer_keywords": ["kubectl logs", "kubectl describe", "network", "resources", "events"],
+    "expected_kubectl_commands": ["kubectl logs", "kubectl describe pod", "kubectl get events"],
+    "ground_truth_summary": "Start by checking pod logs, events, resource utilization, and network connectivity. Could be app-level, network, or resource issue.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "cross-002",
+    "category": "Cross",
+    "question": "After a cluster upgrade, several workloads are broken. How to systematically diagnose?",
+    "expected_retrieval_keywords": ["upgrade", "broken", "workloads"],
+    "expected_answer_keywords": ["kubectl get pods", "events", "describe", "logs", "API", "deprecation"],
+    "expected_kubectl_commands": ["kubectl get pods", "kubectl get events"],
+    "ground_truth_summary": "Check all pod statuses, review events, check for API deprecation issues, verify node readiness.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "cross-003",
+    "category": "Cross",
+    "question": "How to get an overview of cluster health quickly?",
+    "expected_retrieval_keywords": ["cluster", "health", "overview"],
+    "expected_answer_keywords": ["kubectl get nodes", "kubectl get pods", "kubectl top", "componentstatuses"],
+    "expected_kubectl_commands": ["kubectl get nodes", "kubectl get pods", "kubectl top nodes"],
+    "ground_truth_summary": "Check nodes status, pod status across namespaces, resource usage, component health.",
+    "difficulty": "easy"
+  }
+]
